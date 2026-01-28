@@ -1,0 +1,206 @@
+import streamlit as st
+
+# --- Page Configuration ---
+st.set_page_config(layout="wide", page_title="Teacher Dashboard", initial_sidebar_state="collapsed")
+
+# --- Custom CSS for Styling ---
+# This CSS handles the dark theme, card styling, and specific layout tweaks to match the image.
+st.markdown("""
+<style>
+    /* Main Background */
+    .stApp {
+        background-color: #2b303b;
+        color: white;
+    }
+
+    /* Card Styling */
+    .css-1r6slb0 {
+        background-color: #f0f2f6; 
+        padding: 20px;
+        border-radius: 10px;
+        color: #31333F;
+    }
+    
+    /* Custom Card Class for Lesson Plans */
+    .lesson-card {
+        background-color: #1e1e1e;
+        color: white;
+        border-radius: 10px;
+        padding: 0px;
+        margin: 5px;
+        border: 1px solid #444;
+        overflow: hidden;
+    }
+    
+    .lesson-header {
+        background-color: #333;
+        padding: 10px;
+        font-weight: bold;
+        text-align: center;
+        border-bottom: 2px solid #d4af37; /* Gold accent */
+    }
+
+    .lesson-body {
+        padding: 15px;
+        font-size: 0.9em;
+    }
+
+    .gold-button {
+        background-color: #d4af37;
+        color: black;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-weight: bold;
+        text-align: center;
+        display: block;
+        width: 100%;
+        margin-top: 10px;
+        text-decoration: none;
+    }
+
+    /* Section Headers */
+    h3 {
+        color: #ffffff;
+        border-bottom: 1px solid #555;
+        padding-bottom: 5px;
+        margin-bottom: 20px;
+    }
+    
+    /* White Containers */
+    .white-container {
+        background-color: #e6e6e6;
+        padding: 20px;
+        border-radius: 15px;
+        color: black;
+        margin-bottom: 20px;
+    }
+    
+    .resource-item {
+        background-color: #cccccc;
+        margin: 5px 0;
+        padding: 10px;
+        border-radius: 5px;
+    }
+    
+    /* Analytics Tags */
+    .tag {
+        display: inline-block;
+        padding: 5px 15px;
+        margin-right: 5px;
+        border-radius: 15px;
+        font-size: 0.8em;
+        font-weight: bold;
+    }
+    .tag-gold { background-color: #d4af37; color: black; }
+    .tag-dark { background-color: #1e1e1e; color: white; }
+
+</style>
+""", unsafe_allow_html=True)
+
+# --- Layout Structure ---
+
+# Main Grid: Top Section (Lesson Plans + Timetable)
+col1, col2 = st.columns([3, 1]) 
+
+with col1:
+    # --- Lesson Plans Section ---
+    st.markdown('<div class="white-container">', unsafe_allow_html=True)
+    st.subheader("LESSON PLANS")
+    
+    # We use columns inside this container to simulate the horizontal cards
+    lc1, lc2, lc3 = st.columns(3)
+    
+    def lesson_card(title, topic):
+        return f"""
+        <div class="lesson-card">
+            <div style="height: 100px; background-color: #555; display: flex; align-items: center; justify-content: center; color: #aaa;">
+                [Course Image Placeholder]
+            </div>
+            <div class="lesson-body">
+                <h4 style="margin:0; color:#d4af37;">{title}</h4>
+                <p style="font-size:0.8em; color: #ccc;">NEXT LESSON:</p>
+                <h3 style="margin:0;">{topic}</h3>
+                <hr style="border-color: #444;">
+                <p><strong>LESSON PREP:</strong><br>1. Review slides<br>2. Print handouts</p>
+                <p><strong>LEARNING OUTCOMES:</strong><br>1. Understand basics<br>2. Apply theory</p>
+                <a href="#" class="gold-button">SEE MORE</a>
+            </div>
+        </div>
+        """
+
+    with lc1:
+        st.markdown(lesson_card("COURSE TITLE", "LESSON TOPIC A"), unsafe_allow_html=True)
+    with lc2:
+        st.markdown(lesson_card("COURSE TITLE", "LESSON TOPIC B"), unsafe_allow_html=True)
+    with lc3:
+        st.markdown(lesson_card("COURSE TITLE", "LESSON TOPIC C"), unsafe_allow_html=True)
+        
+    st.markdown("<br><div style='text-align:right;'><a href='#' class='gold-button' style='width:200px; display:inline-block;'>VIEW ALL LESSON PLANS →</a></div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True) # End white container
+
+with col2:
+    # --- Timetable Section ---
+    st.markdown('<div class="white-container" style="height: 100%;">', unsafe_allow_html=True)
+    st.subheader("TIMETABLE")
+    st.markdown("""
+    <div style="background-color: #ddd; height: 400px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #777;">
+        [Calendar Widget Placeholder]
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# Second Row: Insights & Student Support
+row2_col1, row2_col2 = st.columns([3, 1])
+
+with row2_col1:
+    # --- Insights & Analytics ---
+    st.markdown('<div class="white-container">', unsafe_allow_html=True)
+    st.subheader("INSIGHTS & ANALYTICS")
+    
+    # Filter Tags
+    st.markdown("""
+    <div>
+        <span class="tag tag-gold">ONLINE</span>
+        <span class="tag tag-dark">IN PERSON</span>
+        <span class="tag tag-dark">SPORTS</span>
+    </div>
+    <br>
+    """, unsafe_allow_html=True)
+
+    # Charts (Using Streamlit native charts for functionality)
+    chart_c1, chart_c2 = st.columns(2)
+    with chart_c1:
+        st.markdown("**Attendance Trends**")
+        st.bar_chart({"Week 1": 80, "Week 2": 85, "Week 3": 70, "Week 4": 90})
+    with chart_c2:
+        st.markdown("**Student Performance**")
+        st.line_chart({"Test A": 60, "Test B": 72, "Test C": 85})
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with row2_col2:
+    # --- Student Support Resources ---
+    st.markdown('<div class="white-container">', unsafe_allow_html=True)
+    st.subheader("STUDENT SUPPORT")
+    
+    # List items
+    resources = ["Counseling Services", "Academic Tutoring", "Financial Aid", "Health Center", "Career Guidance"]
+    for res in resources:
+        st.markdown(f'<div class="resource-item">{res}</div>', unsafe_allow_html=True)
+        
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# --- Teacher Resources (Footer Area) ---
+st.subheader("TEACHER RESOURCES")
+with st.container():
+    # Accordion style expanders
+    with st.expander("Administrative Forms & Policies"):
+        st.write("Link to leave requests, expense forms, and HR policies.")
+        st.button("Download Forms", key="btn1")
+        
+    with st.expander("Professional Development"):
+        st.write("Upcoming workshops, webinars, and certification programs.")
+        
+    with st.expander("IT Support & Software"):
+        st.write("Submit a ticket, download software, or view system status.")
