@@ -1,0 +1,448 @@
+import streamlit as st
+import pandas as pd
+from databricks import sql
+from databricks.sdk.core import Config
+from datetime import date, datetime, timedelta
+
+# ==============================================================================
+# 1. APP CONFIGURATION & STYLING
+# ==============================================================================
+st.set_page_config(
+    page_title="Street League | Staff Portal",
+    page_icon="⚽",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# Dark Theme + Gold Accents (#d4af37)
+st.markdown("""
+<style>
+    .stApp { background-color: #1e1e24; color: #e0e0e0; }
+    h1, h2, h3, h4 { color: #ffffff !important; font-family: 'Helvetica Neue', sans-serif; }
+    .gold-text { color: #d4af37 !important; font-weight: bold; }
+    
+    /* Cards */
+    .action-card {
+        background-color: #2b303b;
+        border: 1px solid #444;
+        border-left: 4px solid #d4af37;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+    }
+    
+    /* Timeline */
+    .timeline-container { border-left: 2px solid #555; padding-left: 20px; margin-left: 10px; margin-top: 20px; }
+    .timeline-item { position: relative; margin-bottom: 25px; }
+    .timeline-dot { 
+        position: absolute; left: -26px; top: 0; width: 12px; height: 12px; 
+        border-radius: 50%; background-color: #d4af37; border: 2px solid #1e1e24; 
+    }
+    .timeline-date { font-size: 0.85rem; color: #d4af37; margin-bottom: 4px; font-weight: 600; }
+    .timeline-card { background: #2b303b; padding: 12px; border-radius: 6px; border: 1px solid #444; }
+    
+    /* Utilities */
+    .stDataFrame { border: 1px solid #444; border-radius: 5px; }
+    .stButton>button { border-radius: 6px; font-weight: 600; }
+</style>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
+# 2. DATABASE MANAGER (Robust & Cached)
+# ==============================================================================
+
+SERVER_HOSTNAME = "adb-7405616962374519.19.azuredatabricks.net"
+HTTP_PATH = "/sql/1.0/warehouses/8f5a9850fb0fd35e"
+CATALOG = "hackathon"
+SCHEMA = "emea"
+
+@st.cache_resource
+def get_db_connection():
+    """
+    Establishes a connection. Cached to avoid handshake overhead.
+    """
+    cfg = Config()
+    return sql.connect(
+        server_hostname=SERVER_HOSTNAME,
+        http_path=HTTP_PATH,
+        access_token=cfg.token
+    )
+
+def execute_sql_safe(query_str, params=None):
+    """
+    Executes SQL with automatic retry logic for stale connections.
+    """
+    if params is None:
+        params = ()
+        
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute(query_str, params)
+            return cursor.fetchall_arrow().to_pandas()
+    except Exception:
+        # Retry logic: Clear cache and reconnect
+        st.cache_resource.clear()
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute(query_str, params)
+                return cursor.fetchall_arrow().to_pandas()
+        except Exception as e:
+            st.error(f"🔌 Database Error after retry: {e}")
+            return pd.DataFrame()
+
+@st.cache_data(ttl=300, show_spinner=False)
+def run_query_cached(query_str, params=()):
+    """
+    For expensive queries (Risk Radar, Schedule). Caches result for 5 mins.
+    """
+    return execute_sql_safe(query_str, params)
+
+def run_query_fresh(query_str, params=()):
+    """
+    For highly interactive queries (Student Timeline). No result caching.
+    """
+    return execute_sql_safe(query_str, params)
+
+# ==============================================================================
+# 3. SQL TEMPLATES (Parameterized & Optimized)
+# ==============================================================================
+
+class Queries:
+    
+    GET_STAFF_CONTEXT = f"""
+        SELECT staff_id, staff_code, role, city_id 
+        FROM {CATALOG}.{SCHEMA}.staff 
+        WHERE staff_code = ?
+    """
+    
+    # Improved: Returns proper City Name for header
+    GET_CITY_NAME = f"""
+        SELECT city_name FROM {CATALOG}.{SCHEMA}.city WHERE city_id = ?
+    """
+
+    GET_SCHEDULE = f"""
+        SELECT 
+            s.session_date,
+            s.start_time,
+            lp.lesson_title,
+            lp.requires_equipment,
+            c.cohort_code,
+            com.community_name as location,
+            s.planned_participants
+        FROM {CATALOG}.{SCHEMA}.session s
+        JOIN {CATALOG}.{SCHEMA}.lesson_plan lp ON s.lesson_plan_id = lp.lesson_plan_id
+        JOIN {CATALOG}.{SCHEMA}.cohort c ON s.cohort_id = c.cohort_id
+        JOIN {CATALOG}.{SCHEMA}.academy a ON c.academy_id = a.academy_id
+        JOIN {CATALOG}.{SCHEMA}.community com ON a.community_id = com.community_id
+        WHERE (s.lead_staff_id = ? OR s.support_staff_id = ?)
+          AND s.session_date >= current_date()
+        ORDER BY s.session_date ASC, s.start_time ASC
+        LIMIT 10
+    """
+
+    # Improved: Added explicit flags for UI filtering
+    GET_RISK_RADAR = f"""
+        WITH base AS (
+          SELECT
+            p.participant_id, p.participant_code, c.cohort_code, com.community_name,
+            pr.attendance_rate_pct, pr.engagement_score, pr.progress_date
+          FROM {CATALOG}.{SCHEMA}.progress pr
+          JOIN {CATALOG}.{SCHEMA}.participant p ON pr.participant_id = p.participant_id
+          JOIN {CATALOG}.{SCHEMA}.cohort c ON pr.cohort_id = c.cohort_id
+          JOIN {CATALOG}.{SCHEMA}.academy a ON c.academy_id = a.academy_id
+          JOIN {CATALOG}.{SCHEMA}.community com ON a.community_id = com.community_id
+          WHERE com.city_id = ?
+            AND pr.progress_date >= date_sub(current_date(), 30)
+        ),
+        latest_progress AS (
+          SELECT * FROM (
+            SELECT *, row_number() OVER (PARTITION BY participant_id ORDER BY progress_date DESC) AS rn
+            FROM base
+          ) t WHERE rn = 1
+        ),
+        attendance_30 AS (
+          SELECT
+            p.participant_id,
+            AVG(COALESCE(a.arrival_time_variance_mins, 0)) AS avg_lateness,
+            SUM(CASE WHEN a.participation_level = 'Low' THEN 1 ELSE 0 END) AS low_participation_count
+          FROM {CATALOG}.{SCHEMA}.attendance a
+          JOIN {CATALOG}.{SCHEMA}.participant p ON a.participant_id = p.participant_id
+          JOIN {CATALOG}.{SCHEMA}.session s ON a.session_id = s.session_id
+          JOIN {CATALOG}.{SCHEMA}.cohort c ON s.cohort_id = c.cohort_id
+          JOIN {CATALOG}.{SCHEMA}.academy ac ON c.academy_id = ac.academy_id
+          JOIN {CATALOG}.{SCHEMA}.community com ON ac.community_id = com.community_id
+          WHERE com.city_id = ?
+            AND a.created_at >= date_sub(current_date(), 30)
+          GROUP BY p.participant_id
+        )
+        SELECT
+          lp.participant_code,
+          lp.cohort_code,
+          lp.attendance_rate_pct,
+          CAST(COALESCE(att.avg_lateness, 0) AS INT) AS avg_lateness,
+          COALESCE(att.low_participation_count, 0) AS low_participation_count,
+          
+          -- Flags for UI
+          CASE WHEN lp.attendance_rate_pct < 80 THEN true ELSE false END AS flag_attendance,
+          CASE WHEN COALESCE(att.avg_lateness, 0) > 15 THEN true ELSE false END AS flag_lateness,
+          CASE WHEN COALESCE(att.low_participation_count, 0) > 2 THEN true ELSE false END AS flag_participation,
+          
+          -- Risk Score
+          (CASE WHEN lp.attendance_rate_pct < 80 THEN 3 ELSE 0 END) +
+          (CASE WHEN COALESCE(att.avg_lateness, 0) > 15 THEN 2 ELSE 0 END) +
+          (CASE WHEN COALESCE(att.low_participation_count, 0) > 2 THEN 1 ELSE 0 END) AS risk_score
+        FROM latest_progress lp
+        LEFT JOIN attendance_30 att ON lp.participant_id = att.participant_id
+        WHERE (lp.attendance_rate_pct < 80 OR COALESCE(att.avg_lateness, 0) > 15 OR COALESCE(att.low_participation_count, 0) > 2)
+        ORDER BY risk_score DESC
+        LIMIT 50
+    """
+
+    GET_TIMELINE = f"""
+        SELECT event_type, event_date, description, details FROM (
+            SELECT '📝 Enrollment' as event_type, enrollment_date as event_date, 'Joined Program' as description, referral_source as details
+            FROM {CATALOG}.{SCHEMA}.participant WHERE participant_code = ?
+            UNION ALL
+            SELECT '✅ Assessment', assessment_date, concat('Grade: ', grade), 'Skill Check'
+            FROM {CATALOG}.{SCHEMA}.assessment a JOIN {CATALOG}.{SCHEMA}.participant p ON a.participant_id=p.participant_id WHERE p.participant_code = ?
+            UNION ALL
+            SELECT '📈 Progress Check', progress_date, concat('Engagement Score: ', engagement_score), barriers_identified
+            FROM {CATALOG}.{SCHEMA}.progress pr JOIN {CATALOG}.{SCHEMA}.participant p ON pr.participant_id=p.participant_id WHERE p.participant_code = ?
+            UNION ALL
+            SELECT '🏆 Outcome', outcome_date, sector, salary_band
+            FROM {CATALOG}.{SCHEMA}.outcome o JOIN {CATALOG}.{SCHEMA}.participant p ON o.participant_id=p.participant_id WHERE p.participant_code = ?
+        ) ORDER BY event_date DESC
+    """
+
+    # Improved: Uses QUALIFY to de-duplicate top gaps per student
+    GET_RECOMMENDATIONS = f"""
+        SELECT * FROM (
+            SELECT 
+                p.participant_code,
+                s.skill_name,
+                (sa.target_proficiency - sa.current_proficiency) as gap,
+                lp.lesson_title,
+                lp.lesson_code,
+                row_number() OVER (PARTITION BY p.participant_code ORDER BY (sa.target_proficiency - sa.current_proficiency) DESC) as rn
+            FROM {CATALOG}.{SCHEMA}.skill_achievement sa
+            JOIN {CATALOG}.{SCHEMA}.participant p ON sa.participant_id = p.participant_id
+            JOIN {CATALOG}.{SCHEMA}.skill s ON sa.skill_id = s.skill_id
+            JOIN {CATALOG}.{SCHEMA}.bridge_lesson_skill bls ON s.skill_id = bls.skill_id
+            JOIN {CATALOG}.{SCHEMA}.lesson_plan lp ON bls.lesson_plan_id = lp.lesson_plan_id
+            JOIN {CATALOG}.{SCHEMA}.cohort c ON p.cohort_id = c.cohort_id
+            JOIN {CATALOG}.{SCHEMA}.academy a ON c.academy_id = a.academy_id
+            JOIN {CATALOG}.{SCHEMA}.community com ON a.community_id = com.community_id
+            WHERE sa.current_proficiency < sa.target_proficiency
+            AND com.city_id = ?
+        ) WHERE rn <= 2
+        ORDER BY gap DESC
+        LIMIT 50
+    """
+
+# ==============================================================================
+# 4. MAIN APP LOGIC
+# ==============================================================================
+
+def main():
+    # --- Session State Init ---
+    if "snoozed" not in st.session_state:
+        st.session_state["snoozed"] = {}
+    if "selected_student" not in st.session_state:
+        st.session_state["selected_student"] = ""
+
+    # --- A. Sidebar & Auth ---
+    with st.sidebar:
+        st.title("👤 Staff Login")
+        staff_code_input = st.text_input("Staff Code", value="EMP001")
+        
+        if staff_code_input:
+            # Use fresh query for Auth to ensure immediate validity
+            staff_df = run_query_fresh(Queries.GET_STAFF_CONTEXT, params=(staff_code_input,))
+            if not staff_df.empty:
+                current_staff = staff_df.iloc[0]
+                staff_id = int(current_staff['staff_id'])
+                city_id = int(current_staff['city_id'])
+                role = current_staff['role']
+                
+                # Fetch City Name for header
+                city_df = run_query_cached(Queries.GET_CITY_NAME, params=(city_id,))
+                city_name = city_df.iloc[0]['city_name'] if not city_df.empty else "Unknown"
+
+                st.success(f"Welcome, {staff_code_input}")
+                st.caption(f"Role: {role}")
+                st.divider()
+                st.info(f"📍 Location: **{city_name}**")
+            else:
+                st.error("Staff code not found.")
+                st.stop()
+        else:
+            st.stop()
+
+    # --- B. Header ---
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        st.title("STREET LEAGUE MANAGER")
+        st.caption(f"Operational Dashboard | {date.today().strftime('%A, %d %B %Y')}")
+    with c2:
+        # Mock Metric for Visual Balance
+        st.markdown(f"""
+        <div style='text-align:right; padding-top:10px;'>
+            <span class='gold-text' style='font-size:1.5rem;'>14</span> <span style='color:#888;'>Active Cohorts</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # --- C. Tabs ---
+    tab_dash, tab_journey, tab_tools = st.tabs(["🏠 DASHBOARD", "🎓 STUDENT JOURNEY", "🛠️ TOOLS"])
+
+    # --------------------------------------------------------------------------
+    # TAB 1: DASHBOARD (Schedule + Risk Radar)
+    # --------------------------------------------------------------------------
+    with tab_dash:
+        col_sched, col_risk = st.columns([1, 2])
+
+        with col_sched:
+            st.subheader("🗓️ Upcoming Schedule")
+            # CACHED query
+            schedule_df = run_query_cached(Queries.GET_SCHEDULE, params=(staff_id, staff_id))
+            
+            if not schedule_df.empty:
+                for _, row in schedule_df.iterrows():
+                    s_time = str(row['start_time'])[:5]
+                    badge = "🎒 Kit Req." if row['requires_equipment'] else "✅ No Kit"
+                    
+                    st.markdown(f"""
+                    <div class="action-card">
+                        <div style="display:flex; justify-content:space-between; color:#d4af37; font-weight:bold;">
+                            <span>{s_time}</span>
+                            <span style="color:#aaa; font-weight:normal;">{row['location']}</span>
+                        </div>
+                        <div style="font-size:1.1rem; font-weight:bold; margin-top:5px; color:#fff;">
+                            {row['lesson_title']}
+                        </div>
+                        <div style="font-size:0.85rem; color:#ccc; margin-top:5px;">
+                            {row['cohort_code']} • {row['planned_participants']} Participants
+                        </div>
+                        <div style="font-size:0.75rem; color:#888; margin-top:8px; border-top:1px solid #444; padding-top:5px;">
+                            {badge}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No upcoming sessions found.")
+
+        with col_risk:
+            # Layout: Header + Filter Slider
+            cr_head, cr_filter = st.columns([2, 1])
+            with cr_head:
+                st.subheader("⚠️ Risk Radar")
+            with cr_filter:
+                min_risk = st.slider("Min Risk Score", 1, 6, 3)
+
+            # 1. Fetch Data (Cached)
+            risk_df = run_query_cached(Queries.GET_RISK_RADAR, params=(city_id, city_id))
+            
+            if not risk_df.empty:
+                # 2. Filter: "Snooze" Logic & Min Score
+                today = date.today()
+                
+                # Exclude snoozed items
+                risk_df = risk_df[
+                    ~risk_df["participant_code"].map(
+                        lambda x: st.session_state["snoozed"].get(x, today) > today
+                    )
+                ]
+                
+                # Filter by slider
+                risk_df = risk_df[risk_df["risk_score"] >= min_risk]
+
+                # 3. Display Dataframe
+                if not risk_df.empty:
+                    display_df = risk_df[[
+                        'participant_code', 'cohort_code', 'risk_score', 
+                        'flag_attendance', 'flag_lateness', 'flag_participation'
+                    ]]
+                    
+                    event = st.dataframe(
+                        display_df,
+                        column_config={
+                            "participant_code": "Student",
+                            "cohort_code": "Cohort",
+                            "risk_score": st.column_config.NumberColumn("Risk", help="Total Score 0-6"),
+                            "flag_attendance": st.column_config.CheckboxColumn("Low Att."),
+                            "flag_lateness": st.column_config.CheckboxColumn("Late"),
+                            "flag_participation": st.column_config.CheckboxColumn("Low Eng.")
+                        },
+                        use_container_width=True,
+                        hide_index=True,
+                        on_select="rerun",
+                        selection_mode="single-row"
+                    )
+                    
+                    # 4. Action Panel
+                    if len(event.selection.rows) > 0:
+                        selected_idx = event.selection.rows[0]
+                        student_data = risk_df.iloc[selected_idx]
+                        p_code = student_data['participant_code']
+                        
+                        st.markdown(f"#### ⚡ Actions for: {p_code}")
+                        
+                        ac1, ac2, ac3 = st.columns(3)
+                        with ac1:
+                            if st.button("📩 Draft Email"):
+                                st.info(f"Outlook draft created for {p_code}")
+                        with ac2:
+                            if st.button("👤 View Profile"):
+                                # Set state so next tab knows who to load
+                                st.session_state["selected_student"] = p_code
+                                st.toast(f"Profile loaded! Switch to 'Student Journey' tab.")
+                        with ac3:
+                            if st.button("💤 Snooze 7 Days"):
+                                st.session_state["snoozed"][p_code] = date.today() + timedelta(days=7)
+                                st.rerun()
+                else:
+                    st.success("No students meet the risk criteria.")
+            else:
+                st.success("Risk Radar clear! 🎉")
+
+    # --------------------------------------------------------------------------
+    # TAB 2: STUDENT JOURNEY 360
+    # --------------------------------------------------------------------------
+    with tab_journey:
+        c_search, c_display = st.columns([1, 3])
+        
+        with c_search:
+            st.markdown("### 🔍 Search")
+            # Default to session state if set by Risk Radar
+            default_val = st.session_state.get("selected_student", "")
+            p_code_input = st.text_input("Participant Code", value=default_val)
+            
+            # Logic: Update session state on click
+            if st.button("Load History"):
+                st.session_state["selected_student"] = p_code_input
+                st.rerun() # Rerun to ensure flow updates
+        
+        with c_display:
+            # UX FIX: Only query if we have a valid selection in state
+            current_student = st.session_state.get("selected_student")
+            
+            if current_student:
+                # Fresh Query (Not Cached)
+                timeline_df = run_query_fresh(Queries.GET_TIMELINE, params=(current_student, current_student, current_student, current_student))
+                
+                if not timeline_df.empty:
+                    st.markdown(f"### Student Timeline: <span class='gold-text'>{current_student}</span>", unsafe_allow_html=True)
+                    st.markdown("<div class='timeline-container'>", unsafe_allow_html=True)
+                    
+                    for _, row in timeline_df.iterrows():
+                        date_str = pd.to_datetime(row['event_date']).strftime("%d %b %Y")
+                        # Handle NaN details safely
+                        details = "" if pd.isna(row['details']) else str(row['details'])
+                        
+                        st.markdown(f"""
+                        <div class="timeline-item">
+                            <div class="timeline-dot"></div>
+                            <div class="timeline-date">{date_str}</div>
+                            <div class="timeline-card">
+                                <div style="color:#fff;
