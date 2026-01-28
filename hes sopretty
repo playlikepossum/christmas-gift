@@ -1,0 +1,351 @@
+academy
+academy_id: bigint
+academy_code: string
+community_id: int
+product_type_id: int
+year: int
+quarter: int
+capacity: int
+venue_type: string
+start_date: date
+end_date: date
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+community
+community_id: int
+city_id: int
+community_name: string
+postcode_area: string
+description: string
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+product_type
+product_type_id: int
+product_type_name: string
+product_code: string
+duration_weeks: int
+description: string
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+assessment
+assessment_id: int
+participant_id: int
+session_id: int
+assessment_type_id: int
+skill_id: int
+assessment_date: date
+score: int
+max_possible_score: int
+assessor_staff_id: int
+feedback_provided: boolean
+attempt_number: int
+grade: string
+reassessment_required: boolean
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+assessment_type
+assessment_type_id: int
+assessment_name: string
+assessment_code: string
+min_score: int
+max_score: int
+description: string
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+participant
+participant_id: int
+participant_code: string
+cohort_id: int
+age_band: string
+employment_status_at_entry: string
+education_level_at_entry: string
+referral_source: string
+completion_status: string
+enrollment_date: date
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+session
+session_id: int
+session_code: string
+cohort_id: int
+lesson_plan_id: int
+lead_staff_id: int
+support_staff_id: int
+start_time: string
+actual_duration_minutes: int
+session_type: string
+sport_type_id: int
+planned_participants: int
+actual_participants: int
+session_status: string
+weather_impact: boolean
+external_visitor: boolean
+session_date: date
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+skill
+skill_id: int
+skill_name: string
+skill_category_id: int
+min_proficiency: int
+max_proficiency: int
+description: string
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+
+attendance
+attendance_id: int
+session_id: int
+participant_id: int
+attendance_status: string
+arrival_time_variance_mins: int
+participation_level: string
+behaviour_notes: string
+left_early: boolean
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+bridge_lesson_skill
+bridge_id: int
+lesson_plan_id: int
+skill_id: int
+skill_importance: string
+target_proficiency_level: int
+learning_hours: decimal(4,1)
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+lesson_plan
+lesson_plan_id: int
+lesson_code: string
+lesson_title: string
+theme_id: int
+product_type_id: int
+duration_minutes: int
+difficulty_level: string
+delivery_method: string
+requires_equipment: boolean
+max_participants: int
+version: string
+effective_from: date
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+city
+city_id: int
+city_name: string
+region_id: int
+latitude: double
+longitude: double
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+region
+region_id: int
+region_name: string
+region_code: string
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+cohort
+cohort_id: int
+cohort_code: string
+academy_id: int
+cohort_number: int
+max_participants: int
+day_of_week: string
+session_time: string
+status: string
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+outcome
+outcome_id: int
+participant_id: int
+outcome_type_id: int
+outcome_date: date
+weeks_from_program_end: int
+sector: string
+hours_per_week: int
+salary_band: string
+employer_type: string
+outcome_source: string
+verified: boolean
+recorded_by_staff_id: int
+is_sustained_13_weeks: boolean
+is_sustained_26_weeks: boolean
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+outcome_type
+outcome_type_id: int
+outcome_name: string
+outcome_code: string
+outcome_category: string
+description: string
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+progress
+progress_id: int
+participant_id: int
+cohort_id: int
+week_number: int
+progress_date: date
+attendance_rate_pct: decimal(5,2)
+engagement_score: int
+confidence_score: int
+motivation_score: int
+skills_progress_score: int
+overall_progress: string
+barriers_identified: string
+support_provided: boolean
+recorded_by_staff_id: int
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+sport_type
+sport_type_id: int
+sport_name: string
+sport_code: string
+is_team_sport: boolean
+description: string
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+sport_type_id
+
+
+skill_category
+skill_category_id: int
+category_name: string
+category_code: string
+description: string
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+skill_category_id
+skill_achievement
+achievement_id: int
+participant_id: int
+skill_id: int
+initial_proficiency: int
+current_proficiency: int
+target_proficiency: int
+first_assessed_date: date
+achievement_status: string
+evidence_type: string
+verified_by_staff_id: int
+last_assessed_date: date
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+sport_participation
+participation_id: int
+participant_id: int
+session_id: int
+sport_type_id: int
+participation_date: date
+duration_minutes: int
+intensity_level: string
+skill_level: string
+team_role: string
+performance_rating: int
+enjoyment_rating: int
+sportsmanship_rating: int
+injury_reported: boolean
+coach_staff_id: int
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+staff
+staff_id: int
+staff_code: string
+city_id: int
+role: string
+employment_type: string
+years_experience: int
+is_first_aid_certified: boolean
+is_safeguarding_trained: boolean
+is_coaching_qualified: boolean
+hire_date: date
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
+
+
+workshop_theme
+theme_id: int
+theme_name: string
+theme_code: string
+category: string
+description: string
+created_at: timestamp
+updated_at: timestamp
+is_active: boolean
+data_source: string
