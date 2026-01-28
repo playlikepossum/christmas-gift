@@ -1,0 +1,149 @@
+1) Turn Risk Radar into a real task list (biggest win)
+
+Right now: you can snooze, but nothing is persisted. Staff will want: “what did we do about this?”
+
+Add an Intervention Log:
+
+action type: Email / Call / Meeting / Safeguarding / Referral
+
+notes
+
+status: Open / In progress / Resolved
+
+follow-up date
+
+who did it (staff_id)
+
+Then change Risk Radar to:
+
+show only “Open / due” items by default
+
+include last action + last action date
+
+allow “Resolve” button
+
+Even if you don’t build a DB table yet, you can prototype with a simple table in Databricks.
+
+2) Add “Explain why” and “What to do next” for each risk student
+
+When staff select a student, show:
+
+Attendance % (last progress)
+
+Avg lateness (30d)
+
+Low engagement count (30d)
+
+Flags triggered ✅/❌
+
+a short “Recommended action” text based on which flag is true
+
+Example logic:
+
+low attendance → “Send check-in + identify barriers”
+
+lateness → “Agree transport plan / reminder”
+
+low engagement → “1:1 conversation, adjust session role”
+
+This makes the tool feel helpful, not just judgemental.
+
+3) Add cohort + date range filters (so staff can focus)
+
+Minimum additions:
+
+cohort dropdown (based on staff’s cohorts)
+
+date window: 14 / 30 / 60 days (affects risk query)
+
+toggle: “Show snoozed” / “Hide snoozed”
+
+These are tiny UX changes that massively improve day-to-day usage.
+
+4) Student Journey should be a profile page, not only a timeline
+
+Add a “Profile Summary” panel above the timeline:
+
+age_band, employment_status_at_entry, education_level_at_entry
+
+completion_status
+
+latest progress scores (engagement/confidence/motivation/skills)
+
+You already have the columns in participant + progress.
+
+Also add “Last 30 days snapshot”:
+
+sessions attended / total
+
+avg lateness
+
+most common participation level
+
+most recent behaviour_notes (if present)
+
+5) Add charts that answer “is this getting better?”
+
+For a selected student:
+
+attendance_rate_pct over time (from progress)
+
+engagement_score over time (from progress)
+
+For managers:
+
+count of high-risk students over last 8 weeks
+
+attendance rate by cohort
+
+This turns the tool from a static list into something that supports planning.
+
+6) Improve search: autocomplete + fuzzy lookup
+
+Staff won’t remember exact participant codes.
+
+Add:
+
+search by participant_code OR partial match
+
+optionally add a “search by cohort” list of participants
+
+A simple query:
+
+SELECT participant_code
+FROM hackathon.emea.participant
+WHERE participant_code LIKE ?
+LIMIT 20
+
+
+Then show a st.selectbox of matches.
+
+7) “Lesson recommender” should support planning sessions
+
+Right now it shows top 2 gaps per student, which is good, but staff also need:
+
+“Top skills lacking in this city/cohort”
+
+“Top recommended lesson plans this week”
+
+filter by product_type / delivery_method / requires_equipment
+
+This makes it usable for curriculum prep.
+
+8) Timetable: add “prep checklist” and “kit required count”
+
+Quick quality-of-life:
+
+display a weekly view (today + next 7 days grouped by date)
+
+show kit-required sessions count
+
+show venue/location consistently
+
+9) Add role-based views (coach vs manager)
+
+You already have staff.role. Use it:
+
+Coaches: Schedule + Risk + Student Journey
+
+Managers: add Cohort Insights tab (attendance trends, risk counts, outcomes)
